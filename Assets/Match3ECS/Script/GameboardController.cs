@@ -132,31 +132,43 @@ typeof(ChipColorComponent),
     {
         var boardPieces = new NativeArray<PieceColor>(PieceColors, Allocator.Persistent);
 
-        var matches = new NativeArray<int>(PieceColors.Length, Allocator.Persistent);
+        var horizontalMatchesResult = new NativeArray<int>(PieceColors.Length, Allocator.TempJob);
 
         var horizontalMatchesJob = new FindHorizontalMatchesJob
         {
             Board = boardPieces,
             SlotsPerRow = BoardWidth,
-            Matches = matches
+            Output = horizontalMatchesResult
         };
 
         JobHandle jobHandle = horizontalMatchesJob.Schedule(PieceColors.Length, BoardWidth);
 
         jobHandle.Complete();
 
-        //PrintMatches(matches);
+        PrintMatches(horizontalMatchesResult);
 
-        matches.Dispose();
+        horizontalMatchesResult.Dispose();
 
         boardPieces.Dispose();
     }
 
-    private void PrintMatches(NativeList<int> matches)
+    private void PrintMatches(NativeArray<int> matches)
     {
+        bool matchHasBeenFound = false;
         foreach(var match in matches)
         {
-            Debug.Log("Match found" + match);
+            if(match > 0)
+            {
+                Debug.Log("Match found " + match);
+                matchHasBeenFound = true;
+            }
+        }
+
+        if(matchHasBeenFound)
+        {
+            Debug.LogFormat("<color=green> ==================== </color>");
+            Debug.LogFormat("<color=green> Match has been found!</color>");
+            Debug.LogFormat("<color=green> ==================== </color>");
         }
     }
 }

@@ -10,7 +10,7 @@ public struct FindHorizontalMatchesJob : IJobParallelFor
 
     [ReadOnly] public int SlotsPerRow;
 
-    [WriteOnly] public NativeArray<int> Matches;
+    [WriteOnly] public NativeArray<int> Output;
 
     public void Execute(int index)
     {
@@ -18,7 +18,14 @@ public struct FindHorizontalMatchesJob : IJobParallelFor
         int convertedRowLeftLimit = row * SlotsPerRow;
         int convertedRowRightLimit = convertedRowLeftLimit + SlotsPerRow;
 
+        // todo : replace
+        List<int> matches = new List<int>();
+
         PieceColor myColor = Board[index];
+
+        // add selected chip to collection of matches as we going to check pieces
+        // to left and right and don't include selected chi[
+        matches.Add(index);
 
         // going left
         for (int i = index - 1; i >= convertedRowLeftLimit; i--)
@@ -26,7 +33,7 @@ public struct FindHorizontalMatchesJob : IJobParallelFor
             var selectedPiece = Board[i];
             if (selectedPiece == myColor) // matched !
             {
-               // Matches.Add(i);
+                matches.Add(i);
             }
             else
             {
@@ -40,7 +47,7 @@ public struct FindHorizontalMatchesJob : IJobParallelFor
             var selectedPiece = Board[i];
             if (selectedPiece == myColor) // matched !
             {
-               // Matches.Add(i);
+                matches.Add(i);
             }
             else
             {
@@ -49,24 +56,15 @@ public struct FindHorizontalMatchesJob : IJobParallelFor
         }
 
         // more than 2 pieces of same color
-        //if (matches.Length > 2)
-        //    Matches = matches;
+        if (matches.Count > 2)
+        {
+            Output[index] = matches.Count;
+
+            //for (int m = 0; m < matches.Count; m++)
+            // write all match list somewhere
+                //Output.Enqueue(m);
+        }
 
         //matches.Dispose();
-    }
-}
-
-
-public struct FindVerticalMatchesJob : IJobParallelFor
-{
-    [ReadOnly] public NativeArray<PieceColor> Board;
-    [ReadOnly] public int SlotsPerColumn;
-    [WriteOnly] public NativeArray<Vector3> Matches;
-
-    public void Execute(int index)
-    {
-
-
-
     }
 }
