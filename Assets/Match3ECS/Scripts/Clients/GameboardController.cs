@@ -137,6 +137,7 @@ typeof(ChipColorComponent),
         for (int i = 0; i < chipsAmount; i++)
         {
             var currentEntity = _generatedChips[i];
+            var slot = _generatedSlots[i];
 
             var x = i % BoardWidth;
             var y = (int) Mathf.Floor(i / (float) BoardHeight);
@@ -179,13 +180,11 @@ typeof(ChipColorComponent),
                 Falling = false
             });
 
+
             // add created pieces to array of pieces
             BoardPieces[x, y] = pieceColor;
             PieceColors[i] = pieceColor;
         }
-
-
-
 
         // createdEntities.Dispose();
 
@@ -242,11 +241,11 @@ typeof(ChipColorComponent),
             Debug.LogFormat("<color=green> Match has been found!</color>");
             Debug.LogFormat("<color=green> ==================== </color>");
 
-            ProccessEntities(chipsToDestroy);
+            ProcessEntities(chipsToDestroy);
         }
     }
 
-    private void ProccessEntities(List<int> chipsToDestroy)
+    private void ProcessEntities(List<int> chipsToDestroy)
     {
         foreach (var chip in chipsToDestroy)
         {
