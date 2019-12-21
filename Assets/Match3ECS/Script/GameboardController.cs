@@ -30,6 +30,7 @@ public struct PieceMaterialByColor
 
 public class GameboardController : MonoBehaviour
 {
+    [Space, Header("Pieces"), Space]
     public Mesh PieceMesh;
 
     public List<PieceMaterialByColor> Pieces;
@@ -40,40 +41,102 @@ public class GameboardController : MonoBehaviour
     private PieceColor[,] BoardPieces;
     private PieceColor[] PieceColors;
 
-    [Header("Board"), Space]
+    [Space, Header("Board"), Space]
+    public Mesh SlotMesh;
+    public Material SlotMaterial;
+    public int SlotLayer = 8;
+
+    [Space, Header("Properties"), Space]
     public int BoardWidth = 8;
     public int BoardHeight = 8;
 
     public float SlotPhysicalSpace = 1;
 
     public float PieceFallingSpeed = 9.8f;
+    public int GamePieceLayer = 9;
+
+    #region "ECS variables"
+
+    private EntityManager _entityManager;
+
+    private NativeArray<Entity> _generatedChips = new NativeArray<Entity>();
+    private NativeArray<Entity> _generatedSlots = new NativeArray<Entity>();
+
+    #endregion
 
     protected void Start()
     {
-        var entityManager = World.Active.EntityManager;
+        _entityManager = World.Active.EntityManager;
 
-        EntityArchetype gameboardChipArchetype = entityManager.CreateArchetype
+        // game piece (aka crystal, fruit, honey, etc.)
+        EntityArchetype chipArchetype = _entityManager.CreateArchetype
         (
 typeof(ChipColorComponent),
             typeof(ChipPositionComponent),
             typeof(Translation),
             typeof(LocalToWorld),
             typeof(RenderMesh),
-            typeof(GravityComponent)
+            typeof(GravityComponent),
+            typeof(ChipEntity)
         );
 
-        int entitiesNeeded = BoardHeight * BoardWidth;
+        // slot
+        EntityArchetype slotArchetype = _entityManager.CreateArchetype
+        (
+            typeof(Translation),
+            typeof(LocalToWorld),
+            typeof(RenderMesh),
+            typeof(SlotPosition),
+            typeof(SlotEntity)
+        );
 
-        var createdEntities = new NativeArray<Entity>(entitiesNeeded, Allocator.Temp);
+        int chipsAmount = BoardHeight * BoardWidth;
+        int slotsAmount = BoardHeight * BoardWidth;
 
-        entityManager.CreateEntity(gameboardChipArchetype, createdEntities);
+        _generatedChips = new NativeArray<Entity>(chipsAmount, Allocator.Persistent);
+        _generatedSlots = new NativeArray<Entity>(chipsAmount, Allocator.Persistent);
+
+        _entityManager.CreateEntity(chipArchetype, _generatedChips);
+        _entityManager.CreateEntity(slotArchetype, _generatedSlots);
 
         BoardPieces = new PieceColor[BoardWidth, BoardHeight];
         PieceColors = new PieceColor[BoardHeight * BoardWidth];
 
-        for (int i = 0; i < entitiesNeeded; i++)
+        // generating slots
+
+        for (int i = 0; i < slotsAmount; i++)
         {
-            var currentEntity = createdEntities[i];
+            var currentEntity = _generatedSlots[i];
+
+            var x = i % BoardWidth;
+            var y = (int) Mathf.Floor(i / (float) BoardHeight);
+
+            // set renderer
+            _entityManager.SetSharedComponentData(currentEntity, new RenderMesh
+            {
+                mesh = SlotMesh,
+                material = SlotMaterial,
+                layer = SlotLayer
+            });
+
+            var coordinatePosition = new Vector3(x * SlotPhysicalSpace, y * SlotPhysicalSpace, 0);
+
+            // set world coordinates
+            _entityManager.SetComponentData(currentEntity, new Translation { Value = coordinatePosition });
+
+            // set piece position
+            _entityManager.SetComponentData(currentEntity, new SlotPosition
+            {
+                X = x,
+                Y = y
+            });
+        }
+
+        // generating chips
+
+        for (int i = 0; i < chipsAmount; i++)
+        {
+            var currentEntity = _generatedChips[i];
 
             var x = i % BoardWidth;
             var y = (int) Mathf.Floor(i / (float) BoardHeight);
@@ -84,32 +147,33 @@ typeof(ChipColorComponent),
             var pieceColor = randomPiece.Color;
 
             // set renderer
-            entityManager.SetSharedComponentData(currentEntity, new RenderMesh
+            _entityManager.SetSharedComponentData(currentEntity, new RenderMesh
             {
                 mesh = PieceMesh,
-                material = randomPiece.Material
+                material = randomPiece.Material,
+                layer = GamePieceLayer
             });
 
             var piecePosition = new Vector3(x * SlotPhysicalSpace, y * SlotPhysicalSpace, 0);
 
             // set world coordinates
-            entityManager.SetComponentData(currentEntity, new Translation { Value = piecePosition });
+            _entityManager.SetComponentData(currentEntity, new Translation { Value = piecePosition });
 
             // set piece color
-            entityManager.SetComponentData(currentEntity, new ChipColorComponent
+            _entityManager.SetComponentData(currentEntity, new ChipColorComponent
             {
                 Color = pieceColor
             });
 
             // set piece position
-            entityManager.SetComponentData(currentEntity, new ChipPositionComponent
+            _entityManager.SetComponentData(currentEntity, new ChipPositionComponent
             {
                 X = x,
                 Y = y
             });
 
             // set gravity
-            entityManager.SetComponentData(currentEntity, new GravityComponent
+            _entityManager.SetComponentData(currentEntity, new GravityComponent
             {
                 FallingSpeed = PieceFallingSpeed,
                 Falling = false
@@ -120,7 +184,10 @@ typeof(ChipColorComponent),
             PieceColors[i] = pieceColor;
         }
 
-        createdEntities.Dispose();
+
+
+
+        // createdEntities.Dispose();
 
 
         // todo: call this after board settle
@@ -155,13 +222,18 @@ typeof(ChipColorComponent),
     private void PrintMatches(NativeArray<int> matches)
     {
         bool matchHasBeenFound = false;
+        List<int> chipsToDestroy = new List<int>();
+
+        int index = 0;
         foreach(var match in matches)
         {
             if(match > 0)
             {
                 Debug.Log("Match found " + match);
                 matchHasBeenFound = true;
+                chipsToDestroy.Add(index);
             }
+            index++;
         }
 
         if(matchHasBeenFound)
@@ -169,6 +241,31 @@ typeof(ChipColorComponent),
             Debug.LogFormat("<color=green> ==================== </color>");
             Debug.LogFormat("<color=green> Match has been found!</color>");
             Debug.LogFormat("<color=green> ==================== </color>");
+
+            ProccessEntities(chipsToDestroy);
+        }
+    }
+
+    private void ProccessEntities(List<int> chipsToDestroy)
+    {
+        foreach (var chip in chipsToDestroy)
+        {
+            var selectedEntity = _generatedChips[chip];
+            _entityManager.DestroyEntity(selectedEntity);
+
+            // set gravity
+            /*
+            _entityManager.SetComponentData(selectedEntity, new GravityComponent
+            {
+                FallingSpeed = PieceFallingSpeed,
+                Falling = true
+            });
+            */
         }
     }
 }
+
+
+/// todo: destroy matched pieces
+/// set all pieces above to falling state
+/// repeat
