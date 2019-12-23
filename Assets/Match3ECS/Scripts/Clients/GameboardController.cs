@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -200,7 +201,7 @@ typeof(ChipColorComponent),
         // todo: call this after board settle
         ScheduleBoardMatchingJob();
 
-        
+
         FallChipsToColumnBellow(new HashSet<int>());
         
         Test();
@@ -308,7 +309,7 @@ typeof(ChipColorComponent),
             for (int j = 0; j < BoardWidth; j++)
             {
                 // rowIndex * numberOfColumns + columnIndex.
-                int index =  (j * BoardHeight) + i;
+                int index =  (j * BoardWidth) + i;
                 
                 Entity currentSlotEntity = _generatedSlots[index];
                 Entity previousSlotEntity = _generatedSlots[previousSlotIndex];
@@ -330,11 +331,10 @@ typeof(ChipColorComponent),
                         Target = previousSlotEntity
                     });
 
-                    previousSlotIndex = index;
+                    previousSlotIndex += BoardWidth;
                     Debug.Log("Adding move to target component");
                 }
-
-                if(previousSlot.m_Chip != Entity.Null)
+                else if(previousSlot.m_Chip != Entity.Null)
                     previousSlotIndex = index;
             }
         }
