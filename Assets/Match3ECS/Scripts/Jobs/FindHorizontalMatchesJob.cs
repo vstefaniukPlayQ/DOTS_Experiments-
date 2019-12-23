@@ -14,12 +14,13 @@ public struct FindHorizontalMatchesJob : IJobParallelFor
 
     public void Execute(int index)
     {
+        return;
+
         int row = Mathf.FloorToInt(index / (float) SlotsPerRow);
         int convertedRowLeftLimit = row * SlotsPerRow;
         int convertedRowRightLimit = convertedRowLeftLimit + SlotsPerRow;
 
-        // todo : replace
-        List<int> matches = new List<int>();
+        NativeList<int> matches = new NativeList<int>(Allocator.Temp);
 
         PieceColor myColor = Board[index];
 
@@ -56,15 +57,15 @@ public struct FindHorizontalMatchesJob : IJobParallelFor
         }
 
         // more than 2 pieces of same color
-        if (matches.Count > 2)
+        if (matches.Length > 2)
         {
-            Output[index] = matches.Count;
+            Output[index] = matches.Length;
 
             //for (int m = 0; m < matches.Count; m++)
             // write all match list somewhere
                 //Output.Enqueue(m);
         }
 
-        //matches.Dispose();
+        matches.Dispose();
     }
 }
