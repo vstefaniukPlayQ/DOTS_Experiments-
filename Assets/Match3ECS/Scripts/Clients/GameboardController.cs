@@ -202,9 +202,7 @@ typeof(ChipColorComponent),
         ScheduleBoardMatchingJob();
 
 
-        FallChipsToColumnBellow(new HashSet<int>());
-        
-        Test();
+        //FallChipsToColumnBellow(new HashSet<int>());
     }
 
     private void OnDestroy()
@@ -217,51 +215,70 @@ typeof(ChipColorComponent),
     {
         var boardPieces = new NativeArray<PieceColor>(PieceColors, Allocator.Persistent);
 
-        var horizontalMatchesResult = new NativeArray<int>(PieceColors.Length, Allocator.TempJob);
 
+        // ==============================================================
+        //                         Horizontal matches
+        // ==============================================================
+
+        var horizontalMatchesResult = new NativeArray<int>(PieceColors.Length, Allocator.TempJob);
         var horizontalMatchesJob = new FindHorizontalMatchesJob
         {
             Board = boardPieces,
             SlotsPerRow = BoardWidth,
             Output = horizontalMatchesResult
         };
-
         JobHandle jobHandle = horizontalMatchesJob.Schedule(PieceColors.Length, BoardWidth);
-
         jobHandle.Complete();
 
-        PrintMatches(horizontalMatchesResult);
+        var horizontalMatches = horizontalMatchesResult.ToArray();
+
+        // ==============================================================
+        //                         Vertical matches
+        // ==============================================================
+
+        var verticalMatchesResult = new NativeArray<int>(PieceColors.Length, Allocator.TempJob);
+        var verticalMatchesJob = new FindVerticalMatchesJob
+        {
+            Board = boardPieces,
+            SlotsPerCollumn = BoardHeight,
+            Output = verticalMatchesResult
+        };
+
+        JobHandle verticaljobHandle = verticalMatchesJob.Schedule(PieceColors.Length, BoardHeight);
+        verticaljobHandle.Complete();
+
+        var verticallMatches = verticalMatchesResult.ToArray();
+
+        // ==============================================================
+        //  Find union of two matched collection and proceed to destroy
+        // ==============================================================
+
+        var verticalMatchedChips   = GetChipsToDestroyFromMatchesMatrix(verticallMatches);
+        var horizontalMatchedChips = GetChipsToDestroyFromMatchesMatrix(horizontalMatches);
+        var mergedMatchedChips = verticalMatchedChips.Union(horizontalMatchedChips).ToList();
 
         horizontalMatchesResult.Dispose();
+        verticalMatchesResult.Dispose();
 
         boardPieces.Dispose();
+
+        DestroyPieces(mergedMatchedChips);
     }
 
-    private void PrintMatches(NativeArray<int> matches)
+    private List<int> GetChipsToDestroyFromMatchesMatrix(int[] matches)
     {
-        bool matchHasBeenFound = false;
-        List<int> chipsToDestroy = new List<int>();
-
+        var chipsToDestroy = new List<int>();
         int index = 0;
         foreach(var match in matches)
         {
             if(match > 0)
             {
                 Debug.Log("Match found " + match);
-                matchHasBeenFound = true;
                 chipsToDestroy.Add(index);
             }
             index++;
         }
-
-        if(matchHasBeenFound)
-        {
-            Debug.LogFormat("<color=green> ==================== </color>");
-            Debug.LogFormat("<color=green> Match has been found!</color>");
-            Debug.LogFormat("<color=green> ==================== </color>");
-
-            DestroyPieces(chipsToDestroy);
-        }
+        return chipsToDestroy;
     }
 
     private void DestroyPieces(List<int> chipsToDestroy)
@@ -282,21 +299,7 @@ typeof(ChipColorComponent),
             columnToUpdate.Add(chip % BoardWidth);
         }
 
-        //FallChipsToColumnBellow(columnToUpdate);
-    }
-
-    private void Test()
-    {
-        int height = 9;
-        int width = 9;
-        
-        for (int i = height; i >= 0; i--)
-        {
-            for (int j = width - 1; j >= 0; j--)
-            {
-                Debug.Log((i + j * width - 1) + " ");
-            }
-        }
+        FallChipsToColumnBellow(columnToUpdate);
     }
 
     private void FallChipsToColumnBellow(HashSet<int> columnToUpdate)

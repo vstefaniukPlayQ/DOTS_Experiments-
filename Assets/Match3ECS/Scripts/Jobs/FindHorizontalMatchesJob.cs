@@ -14,8 +14,6 @@ public struct FindHorizontalMatchesJob : IJobParallelFor
 
     public void Execute(int index)
     {
-        return;
-
         int row = Mathf.FloorToInt(index / (float) SlotsPerRow);
         int convertedRowLeftLimit = row * SlotsPerRow;
         int convertedRowRightLimit = convertedRowLeftLimit + SlotsPerRow;
