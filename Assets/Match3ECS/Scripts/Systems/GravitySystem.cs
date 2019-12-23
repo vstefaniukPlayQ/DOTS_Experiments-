@@ -9,10 +9,17 @@ public class GravitySystem : ComponentSystem
 {
     protected override void OnUpdate()
     {
-        Entities.ForEach((ref GravityComponent gravity, ref Translation translation) =>
+        Entities.ForEach((Entity entity, ref SlotEntity slotEntity) =>
         {
+            /*
             if (gravity.Falling)
                 translation.Value.y -= Time.deltaTime * gravity.FallingSpeed;
+            */
+
+            if (slotEntity.m_Chip == Entity.Null)
+            {
+                
+            } 
         });
     }
 }

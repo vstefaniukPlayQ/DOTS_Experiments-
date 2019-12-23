@@ -185,14 +185,32 @@ typeof(ChipColorComponent),
             BoardPieces[x, y] = pieceColor;
             PieceColors[i] = pieceColor;
         }
-
-        // createdEntities.Dispose();
-
+ 
+        // assign chips to slots
+        for (int i = 0; i < _generatedSlots.Length && i < _generatedChips.Length; i++)
+        {
+            var chip = _generatedChips[i];
+            var slot = _generatedSlots[i];
+            _entityManager.SetComponentData(slot, new SlotEntity()
+            {
+                m_Chip = chip
+            });
+        }
 
         // todo: call this after board settle
         ScheduleBoardMatchingJob();
+
+        
+        FallChipsToColumnBellow(new HashSet<int>());
+        
+        Test();
     }
 
+    private void OnDestroy()
+    {
+        _generatedChips.Dispose();
+        _generatedSlots.Dispose();
+    }
 
     void ScheduleBoardMatchingJob()
     {
@@ -241,26 +259,86 @@ typeof(ChipColorComponent),
             Debug.LogFormat("<color=green> Match has been found!</color>");
             Debug.LogFormat("<color=green> ==================== </color>");
 
-            ProcessEntities(chipsToDestroy);
+            DestroyPieces(chipsToDestroy);
         }
     }
 
-    private void ProcessEntities(List<int> chipsToDestroy)
+    private void DestroyPieces(List<int> chipsToDestroy)
     {
+        HashSet<int> columnToUpdate = new HashSet<int>();
+        
         foreach (var chip in chipsToDestroy)
         {
-            var selectedEntity = _generatedChips[chip];
-            _entityManager.DestroyEntity(selectedEntity);
+            var chipToDestroy = _generatedChips[chip];
+            var slotWithChip = _generatedSlots[chip];
 
-            // set gravity
-            /*
-            _entityManager.SetComponentData(selectedEntity, new GravityComponent
+            _entityManager.DestroyEntity(chipToDestroy);
+            _entityManager.SetComponentData(slotWithChip, new SlotEntity
             {
-                FallingSpeed = PieceFallingSpeed,
-                Falling = true
+                m_Chip = Entity.Null
             });
-            */
+
+            columnToUpdate.Add(chip % BoardWidth);
         }
+
+        //FallChipsToColumnBellow(columnToUpdate);
+    }
+
+    private void Test()
+    {
+        int height = 9;
+        int width = 9;
+        
+        for (int i = height; i >= 0; i--)
+        {
+            for (int j = width - 1; j >= 0; j--)
+            {
+                Debug.Log((i + j * width - 1) + " ");
+            }
+        }
+    }
+
+    private void FallChipsToColumnBellow(HashSet<int> columnToUpdate)
+    {
+        for (int i = 0; i < BoardHeight; i++)
+        { 
+            // rowIndex * numberOfColumns + columnIndex.
+            int previousSlotIndex = i;
+
+            for (int j = 0; j < BoardWidth; j++)
+            {
+                // rowIndex * numberOfColumns + columnIndex.
+                int index =  (j * BoardHeight) + i;
+                
+                Entity currentSlotEntity = _generatedSlots[index];
+                Entity previousSlotEntity = _generatedSlots[previousSlotIndex];
+
+                SlotEntity currentSlot =  _entityManager.GetComponentData<SlotEntity>(currentSlotEntity);
+                SlotEntity previousSlot =  _entityManager.GetComponentData<SlotEntity>(previousSlotEntity);
+
+                if (previousSlot.m_Chip == Entity.Null && currentSlot.m_Chip != Entity.Null)
+                {
+                    var fallingChip = currentSlot.m_Chip;
+
+                    _entityManager.SetComponentData(currentSlotEntity,  new SlotEntity { m_Chip = Entity.Null });
+
+                    _entityManager.SetComponentData(previousSlotEntity, new SlotEntity { m_Chip = fallingChip });
+
+                    _entityManager.AddComponent(fallingChip, typeof(MoveToTargetComponent));
+                    _entityManager.SetComponentData(fallingChip, new MoveToTargetComponent
+                    {
+                        Target = previousSlotEntity
+                    });
+
+                    previousSlotIndex = index;
+                    Debug.Log("Adding move to target component");
+                }
+
+                if(previousSlot.m_Chip != Entity.Null)
+                    previousSlotIndex = index;
+            }
+        }
+
     }
 }
 
