@@ -68,134 +68,8 @@ public class GameboardController : MonoBehaviour
     {
         _entityManager = World.Active.EntityManager;
 
-        // game piece (aka crystal, fruit, honey, etc.)
-        EntityArchetype chipArchetype = _entityManager.CreateArchetype
-        (
-typeof(ChipColorComponent),
-            typeof(ChipPositionComponent),
-            typeof(Translation),
-            typeof(LocalToWorld),
-            typeof(RenderMesh),
-            typeof(GravityComponent),
-            typeof(ChipEntity)
-        );
-
-        // slot
-        EntityArchetype slotArchetype = _entityManager.CreateArchetype
-        (
-            typeof(Translation),
-            typeof(LocalToWorld),
-            typeof(RenderMesh),
-            typeof(SlotPosition),
-            typeof(SlotEntity)
-        );
-
-        int chipsAmount = BoardHeight * BoardWidth;
-        int slotsAmount = BoardHeight * BoardWidth;
-
-        _generatedSlots = new NativeArray<Entity>(chipsAmount, Allocator.Persistent);
-        var _generatedChips = new NativeArray<Entity>(chipsAmount, Allocator.Temp);
-
-        _entityManager.CreateEntity(chipArchetype, _generatedChips);
-        _entityManager.CreateEntity(slotArchetype, _generatedSlots);
-
-        // generating slots
-
-        for (int i = 0; i < slotsAmount; i++)
-        {
-            var currentEntity = _generatedSlots[i];
-
-            var x = i % BoardWidth;
-            var y = (int) Mathf.Floor(i / (float) BoardHeight);
-
-            // set renderer
-            _entityManager.SetSharedComponentData(currentEntity, new RenderMesh
-            {
-                mesh = SlotMesh,
-                material = SlotMaterial,
-                layer = SlotLayer
-            });
-
-            var coordinatePosition = new Vector3(x * SlotPhysicalSpace, y * SlotPhysicalSpace, 0);
-
-            // set world coordinates
-            _entityManager.SetComponentData(currentEntity, new Translation { Value = coordinatePosition });
-
-            // set piece position
-            _entityManager.SetComponentData(currentEntity, new SlotPosition
-            {
-                X = x,
-                Y = y
-            });
-        }
-
-        // generating chips
-
-        for (int i = 0; i < chipsAmount; i++)
-        {
-            var currentEntity = _generatedChips[i];
-            var slot = _generatedSlots[i];
-
-            var x = i % BoardWidth;
-            var y = (int) Mathf.Floor(i / (float) BoardHeight);
-
-            var randomIndex = UnityEngine.Random.Range(0, Pieces.Count);
-            var randomPiece = Pieces[randomIndex];
-
-            var pieceColor = randomPiece.Color;
-
-            // set renderer
-            _entityManager.SetSharedComponentData(currentEntity, new RenderMesh
-            {
-                mesh = PieceMesh,
-                material = randomPiece.Material,
-                layer = GamePieceLayer
-            });
-
-            var piecePosition = new Vector3(x * SlotPhysicalSpace, y * SlotPhysicalSpace, 0);
-
-            // set world coordinates
-            _entityManager.SetComponentData(currentEntity, new Translation { Value = piecePosition });
-
-            // set piece color
-            _entityManager.SetComponentData(currentEntity, new ChipColorComponent
-            {
-                Color = pieceColor
-            });
-
-            // set piece position
-            _entityManager.SetComponentData(currentEntity, new ChipPositionComponent
-            {
-                X = x,
-                Y = y
-            });
-
-            // set gravity
-            _entityManager.SetComponentData(currentEntity, new GravityComponent
-            {
-                FallingSpeed = PieceFallingSpeed,
-                Falling = false
-            });
-
-
-            // add created pieces to array of pieces
-            // PieceColors[i] = pieceColor;
-        }
- 
-        // assign chips to slots
-        for (int i = 0; i < _generatedSlots.Length && i < _generatedChips.Length; i++)
-        {
-            var chip = _generatedChips[i];
-            var slot = _generatedSlots[i];
-            _entityManager.SetComponentData(slot, new SlotEntity()
-            {
-                m_Chip = chip
-            });
-        }
-
-        _generatedChips.Dispose();
+        GenerateBoard();
     }
-
     private void OnDestroy()
     {
         _generatedSlots.Dispose();
@@ -217,6 +91,152 @@ typeof(ChipColorComponent),
         Messenger.RemoveListener(SystemEvents.OnMoveToTargetSystemStopedRunning, OnMoveToTargetSystemStopedRunning);
     }
 
+ #region "Board ECS generation code"
+    private void GenerateBoard()
+    {
+        _generatedSlots = GenerateSlots(BoardSize);
+        NativeArray<Entity> generatedChips = GenerateChips(BoardSize);
+        AssociateChipsWithSlots
+        (
+            slots : _generatedSlots,
+            chips : generatedChips
+            );
+        generatedChips.Dispose();
+    }
+
+    private NativeArray<Entity> GenerateSlots(int slotsAmount)
+    {
+        // slot
+        EntityArchetype slotArchetype = _entityManager.CreateArchetype
+        (
+            typeof(Translation),
+            typeof(LocalToWorld),
+            typeof(RenderMesh),
+            typeof(SlotPosition),
+            typeof(SlotEntity)
+        );
+
+        var generatedSlots = new NativeArray<Entity>(slotsAmount, Allocator.Persistent);
+        _entityManager.CreateEntity(slotArchetype, generatedSlots);
+
+        // generating slots
+        for (int i = 0; i < slotsAmount; i++)
+        {
+            var currentEntity = generatedSlots[i];
+
+            var x = i % BoardWidth;
+            var y = (int) Mathf.Floor(i / (float) BoardHeight);
+
+            // set renderer
+            _entityManager.SetSharedComponentData(currentEntity, new RenderMesh
+            {
+                mesh = SlotMesh,
+                material = SlotMaterial,
+                layer = SlotLayer
+            });
+
+            var coordinatePosition = new Vector3(x * SlotPhysicalSpace, y * SlotPhysicalSpace, 0);
+
+            // set world coordinates
+            _entityManager.SetComponentData(currentEntity, new Translation {Value = coordinatePosition});
+
+            // set piece position
+            _entityManager.SetComponentData(currentEntity, new SlotPosition
+            {
+                X = x,
+                Y = y
+            });
+        }
+
+        return generatedSlots;
+    }
+
+    private NativeArray<Entity> GenerateChips(int chipsAmount)
+    {
+        // game piece (aka crystal, fruit, honey, etc.)
+        EntityArchetype chipArchetype = _entityManager.CreateArchetype
+        (
+            typeof(ChipColorComponent),
+            typeof(ChipPositionComponent),
+            typeof(Translation),
+            typeof(LocalToWorld),
+            typeof(RenderMesh),
+            typeof(GravityComponent),
+            typeof(ChipEntity)
+        );
+
+        NativeArray<Entity> generatedChips = new NativeArray<Entity>(chipsAmount, Allocator.Temp);
+
+        _entityManager.CreateEntity(chipArchetype, generatedChips);
+
+        // generating chips
+
+        for (int i = 0; i < chipsAmount; i++)
+        {
+            var currentEntity = generatedChips[i];
+
+            var x = i % BoardWidth;
+            var y = (int) Mathf.Floor(i / (float) BoardHeight);
+
+            var randomIndex = UnityEngine.Random.Range(0, Pieces.Count);
+            var randomPiece = Pieces[randomIndex];
+
+            var pieceColor = randomPiece.Color;
+
+            // set renderer
+            _entityManager.SetSharedComponentData(currentEntity, new RenderMesh
+            {
+                mesh = PieceMesh,
+                material = randomPiece.Material,
+                layer = GamePieceLayer
+            });
+
+            var piecePosition = new Vector3(x * SlotPhysicalSpace, y * SlotPhysicalSpace, 0);
+
+            // set world coordinates
+            _entityManager.SetComponentData(currentEntity, new Translation {Value = piecePosition});
+
+            // set piece color
+            _entityManager.SetComponentData(currentEntity, new ChipColorComponent
+            {
+                Color = pieceColor
+            });
+
+            // set piece position
+            _entityManager.SetComponentData(currentEntity, new ChipPositionComponent
+            {
+                X = x,
+                Y = y
+            });
+
+            // set gravity
+            _entityManager.SetComponentData(currentEntity, new GravityComponent
+            {
+                FallingSpeed = PieceFallingSpeed,
+                Falling = false
+            });
+        }
+
+        return generatedChips;
+    }
+
+    private void AssociateChipsWithSlots(NativeArray<Entity> slots, NativeArray<Entity> chips)
+    {
+        // assign chips to slots
+        for (int i = 0; i < slots.Length && i < slots.Length; i++)
+        {
+            var chip = chips[i];
+            var slot = slots[i];
+
+            _entityManager.SetComponentData(slot, new SlotEntity()
+            {
+                m_Chip = chip
+            });
+        }
+    }
+
+
+#endregion
 
     private void OnMoveToTargetSystemStartedRunning()
     {
@@ -249,7 +269,8 @@ typeof(ChipColorComponent),
     }
 
     private void DoSlotChipSwapWithAnimation(SlotPosition slotPosition, Vector2Int direction)
-    {        Debug.LogFormat("<color=green> OnChipSwiped </color>");
+    {
+        Debug.LogFormat("<color=green> OnChipSwiped </color>");
 
         // check if we can move in the desired direction
         var moveToX = slotPosition.X + direction.x;
