@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using SharedCore;
@@ -9,10 +8,10 @@ using Unity.Jobs;
 using Unity.Rendering;
 using Unity.Transforms;
 using UnityEngine;
-using Random = System.Random;
 
 public enum PieceColor
 {
+    Undefined = - 1,
     Been = 1,
     Butterfly = 2,
     Cloud = 3,
@@ -37,12 +36,6 @@ public class GameboardController : MonoBehaviour
 
     public List<PieceMaterialByColor> Pieces;
 
-    // todo: it is just a array for the simplicity and fast access,
-    // not quite sure if it need to be separate entity or something
-    // also we don't care to much about other data except of PieceColor
-    private PieceColor[,] BoardPieces;
-    private PieceColor[] PieceColors;
-
     [Space, Header("Board"), Space]
     public Mesh SlotMesh;
     public Material SlotMaterial;
@@ -51,6 +44,10 @@ public class GameboardController : MonoBehaviour
     [Space, Header("Properties"), Space]
     public int BoardWidth = 8;
     public int BoardHeight = 8;
+    public int BoardSize
+    {
+        get { return BoardHeight * BoardWidth; }
+    }
 
     public float SlotPhysicalSpace = 1;
 
@@ -61,8 +58,7 @@ public class GameboardController : MonoBehaviour
 
     private EntityManager _entityManager;
 
-    private NativeArray<Entity> _generatedChips = new NativeArray<Entity>();
-    private NativeArray<Entity> _generatedSlots = new NativeArray<Entity>();
+    private NativeArray<Entity> _generatedSlots;
 
     #endregion
 
@@ -97,14 +93,11 @@ typeof(ChipColorComponent),
         int chipsAmount = BoardHeight * BoardWidth;
         int slotsAmount = BoardHeight * BoardWidth;
 
-        _generatedChips = new NativeArray<Entity>(chipsAmount, Allocator.Persistent);
         _generatedSlots = new NativeArray<Entity>(chipsAmount, Allocator.Persistent);
+        var _generatedChips = new NativeArray<Entity>(chipsAmount, Allocator.Temp);
 
         _entityManager.CreateEntity(chipArchetype, _generatedChips);
         _entityManager.CreateEntity(slotArchetype, _generatedSlots);
-
-        BoardPieces = new PieceColor[BoardWidth, BoardHeight];
-        PieceColors = new PieceColor[BoardHeight * BoardWidth];
 
         // generating slots
 
@@ -186,8 +179,7 @@ typeof(ChipColorComponent),
 
 
             // add created pieces to array of pieces
-            BoardPieces[x, y] = pieceColor;
-            PieceColors[i] = pieceColor;
+            // PieceColors[i] = pieceColor;
         }
  
         // assign chips to slots
@@ -201,16 +193,11 @@ typeof(ChipColorComponent),
             });
         }
 
-        // todo: call this after board settle
-        ScheduleBoardMatchingJob();
-
-
-        //FallChipsToColumnBellow(new HashSet<int>());
+        _generatedChips.Dispose();
     }
 
     private void OnDestroy()
     {
-        _generatedChips.Dispose();
         _generatedSlots.Dispose();
     }
 
@@ -243,7 +230,7 @@ typeof(ChipColorComponent),
         IsChipsMoving = false;
 
         // Core logic
-        //ScheduleBoardMatchingJob();
+        ScheduleBoardMatchingJob();
     }
 
     private void OnChipSwipeRequested(SlotPosition slotPosition, Vector2Int direction)
@@ -284,6 +271,7 @@ typeof(ChipColorComponent),
         var moveToSlotIndex = moveToX + moveToY * BoardWidth;
         var moveFromSlotIndex = slotPosition.X + slotPosition.Y * BoardWidth;
 
+
         var moveToSlot = _generatedSlots[moveToSlotIndex];
         var moveFromSlot = _generatedSlots[moveFromSlotIndex];
 
@@ -301,14 +289,19 @@ typeof(ChipColorComponent),
 
 
         // make chips move
-
-        _entityManager.AddComponent(moveToChip, typeof(MoveToTargetComponent));
+        if(!_entityManager.HasComponent<MoveToTargetComponent>(moveToChip))
+            _entityManager.AddComponent(moveToChip, typeof(MoveToTargetComponent));
+        else
+            Debug.LogError($"{nameof(MoveToTargetComponent)} Component already exist");
         _entityManager.SetComponentData(moveToChip, new MoveToTargetComponent
         {
             Target = moveFromSlot
         });
 
-        _entityManager.AddComponent(moveFromChip, typeof(MoveToTargetComponent));
+        if(!_entityManager.HasComponent<MoveToTargetComponent>(moveFromChip))
+            _entityManager.AddComponent(moveFromChip, typeof(MoveToTargetComponent));
+        else
+            Debug.LogError($"{nameof(MoveToTargetComponent)} Component already exist");
         _entityManager.SetComponentData(moveFromChip, new MoveToTargetComponent
         {
             Target = moveToSlot
@@ -317,21 +310,36 @@ typeof(ChipColorComponent),
 
     void ScheduleBoardMatchingJob()
     {
-        var boardPieces = new NativeArray<PieceColor>(PieceColors, Allocator.Persistent);
+        PieceColor[] pieceColors = new PieceColor[_generatedSlots.Length];
+        for (int i = 0; i < _generatedSlots.Length; i++)
+        {
+            pieceColors[i] = PieceColor.Undefined;
+            if (_generatedSlots[i] != Entity.Null)
+            {
+                var slotEntity = _entityManager.GetComponentData<SlotEntity>(_generatedSlots[i]);
+                var chip = slotEntity.m_Chip;
+                if (chip != Entity.Null)
+                {
+                    var chipColor = _entityManager.GetComponentData<ChipColorComponent>(chip);
+                    pieceColors[i] = chipColor.Color;
+                }
+            }
+        }
 
+        var boardPieces = new NativeArray<PieceColor>(pieceColors, Allocator.TempJob);
 
         // ==============================================================
         //                         Horizontal matches
         // ==============================================================
 
-        var horizontalMatchesResult = new NativeArray<int>(PieceColors.Length, Allocator.TempJob);
+        var horizontalMatchesResult = new NativeArray<int>(BoardSize, Allocator.TempJob);
         var horizontalMatchesJob = new FindHorizontalMatchesJob
         {
             Board = boardPieces,
             SlotsPerRow = BoardWidth,
             Output = horizontalMatchesResult
         };
-        JobHandle jobHandle = horizontalMatchesJob.Schedule(PieceColors.Length, BoardWidth);
+        JobHandle jobHandle = horizontalMatchesJob.Schedule(BoardSize, BoardWidth);
         jobHandle.Complete();
 
         var horizontalMatches = horizontalMatchesResult.ToArray();
@@ -340,7 +348,7 @@ typeof(ChipColorComponent),
         //                         Vertical matches
         // ==============================================================
 
-        var verticalMatchesResult = new NativeArray<int>(PieceColors.Length, Allocator.TempJob);
+        var verticalMatchesResult = new NativeArray<int>(BoardSize, Allocator.TempJob);
         var verticalMatchesJob = new FindVerticalMatchesJob
         {
             Board = boardPieces,
@@ -348,7 +356,7 @@ typeof(ChipColorComponent),
             Output = verticalMatchesResult
         };
 
-        JobHandle verticaljobHandle = verticalMatchesJob.Schedule(PieceColors.Length, BoardHeight);
+        JobHandle verticaljobHandle = verticalMatchesJob.Schedule(BoardSize, BoardHeight);
         verticaljobHandle.Complete();
 
         var verticallMatches = verticalMatchesResult.ToArray();
@@ -391,8 +399,8 @@ typeof(ChipColorComponent),
         
         foreach (var chip in chipsToDestroy)
         {
-            var chipToDestroy = _generatedChips[chip];
             var slotWithChip = _generatedSlots[chip];
+            var chipToDestroy = _entityManager.GetComponentData<SlotEntity>(slotWithChip).m_Chip;
 
             _entityManager.DestroyEntity(chipToDestroy);
             _entityManager.SetComponentData(slotWithChip, new SlotEntity
@@ -432,7 +440,10 @@ typeof(ChipColorComponent),
 
                     _entityManager.SetComponentData(previousSlotEntity, new SlotEntity { m_Chip = fallingChip });
 
-                    _entityManager.AddComponent(fallingChip, typeof(MoveToTargetComponent));
+                    if(!_entityManager.HasComponent<MoveToTargetComponent>(fallingChip))
+                        _entityManager.AddComponent(fallingChip, typeof(MoveToTargetComponent));
+                    else
+                        Debug.LogError($"{nameof(MoveToTargetComponent)} Component already exist");
                     _entityManager.SetComponentData(fallingChip, new MoveToTargetComponent
                     {
                         Target = previousSlotEntity
@@ -445,11 +456,6 @@ typeof(ChipColorComponent),
                     previousSlotIndex = index;
             }
         }
-    }
-
-    private void MoveChipToSlot()
-    {
-
     }
 
     public static int TwoDimentionToOneDimention(int x, int y, int width)
