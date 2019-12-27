@@ -60,6 +60,10 @@ public class GameboardController : MonoBehaviour
 
     private NativeArray<Entity> _generatedSlots;
 
+    private EntityArchetype _chipArchetype;
+
+    private EntityArchetype _slotArchetype;
+
     #endregion
 
     private bool IsChipsMoving;
@@ -107,7 +111,7 @@ public class GameboardController : MonoBehaviour
     private NativeArray<Entity> GenerateSlots(int slotsAmount)
     {
         // slot
-        EntityArchetype slotArchetype = _entityManager.CreateArchetype
+        _slotArchetype = _entityManager.CreateArchetype
         (
             typeof(Translation),
             typeof(LocalToWorld),
@@ -117,7 +121,7 @@ public class GameboardController : MonoBehaviour
         );
 
         var generatedSlots = new NativeArray<Entity>(slotsAmount, Allocator.Persistent);
-        _entityManager.CreateEntity(slotArchetype, generatedSlots);
+        _entityManager.CreateEntity(_slotArchetype, generatedSlots);
 
         // generating slots
         for (int i = 0; i < slotsAmount; i++)
@@ -154,7 +158,7 @@ public class GameboardController : MonoBehaviour
     private NativeArray<Entity> GenerateChips(int chipsAmount)
     {
         // game piece (aka crystal, fruit, honey, etc.)
-        EntityArchetype chipArchetype = _entityManager.CreateArchetype
+        _chipArchetype = _entityManager.CreateArchetype
         (
             typeof(ChipColorComponent),
             typeof(ChipPositionComponent),
@@ -167,57 +171,59 @@ public class GameboardController : MonoBehaviour
 
         NativeArray<Entity> generatedChips = new NativeArray<Entity>(chipsAmount, Allocator.Temp);
 
-        _entityManager.CreateEntity(chipArchetype, generatedChips);
+        _entityManager.CreateEntity(_chipArchetype, generatedChips);
 
         // generating chips
-
         for (int i = 0; i < chipsAmount; i++)
         {
-            var currentEntity = generatedChips[i];
-
-            var x = i % BoardWidth;
-            var y = (int) Mathf.Floor(i / (float) BoardHeight);
-
-            var randomIndex = UnityEngine.Random.Range(0, Pieces.Count);
-            var randomPiece = Pieces[randomIndex];
-
-            var pieceColor = randomPiece.Color;
-
-            // set renderer
-            _entityManager.SetSharedComponentData(currentEntity, new RenderMesh
-            {
-                mesh = PieceMesh,
-                material = randomPiece.Material,
-                layer = GamePieceLayer
-            });
-
-            var piecePosition = new Vector3(x * SlotPhysicalSpace, y * SlotPhysicalSpace, 0);
-
-            // set world coordinates
-            _entityManager.SetComponentData(currentEntity, new Translation {Value = piecePosition});
-
-            // set piece color
-            _entityManager.SetComponentData(currentEntity, new ChipColorComponent
-            {
-                Color = pieceColor
-            });
-
-            // set piece position
-            _entityManager.SetComponentData(currentEntity, new ChipPositionComponent
-            {
-                X = x,
-                Y = y
-            });
-
-            // set gravity
-            _entityManager.SetComponentData(currentEntity, new GravityComponent
-            {
-                FallingSpeed = PieceFallingSpeed,
-                Falling = false
-            });
+            GenerateChip(generatedChips[i], i);
         }
 
         return generatedChips;
+    }
+
+    private void GenerateChip(Entity chipEntity, int i)
+    {
+        var x = i % BoardWidth;
+        var y = (int) Mathf.Floor(i / (float) BoardHeight);
+
+        var randomIndex = UnityEngine.Random.Range(0, Pieces.Count);
+        var randomPiece = Pieces[randomIndex];
+
+        var pieceColor = randomPiece.Color;
+
+        // set renderer
+        _entityManager.SetSharedComponentData(chipEntity, new RenderMesh
+        {
+            mesh = PieceMesh,
+            material = randomPiece.Material,
+            layer = GamePieceLayer
+        });
+
+        var piecePosition = new Vector3(x * SlotPhysicalSpace, y * SlotPhysicalSpace, 0);
+
+        // set world coordinates
+        _entityManager.SetComponentData(chipEntity, new Translation {Value = piecePosition});
+
+        // set piece color
+        _entityManager.SetComponentData(chipEntity, new ChipColorComponent
+        {
+            Color = pieceColor
+        });
+
+        // set piece position
+        _entityManager.SetComponentData(chipEntity, new ChipPositionComponent
+        {
+            X = x,
+            Y = y
+        });
+
+        // set gravity
+        _entityManager.SetComponentData(chipEntity, new GravityComponent
+        {
+            FallingSpeed = PieceFallingSpeed,
+            Falling = false
+        });
     }
 
     private void AssociateChipsWithSlots(NativeArray<Entity> slots, NativeArray<Entity> chips)
@@ -235,6 +241,29 @@ public class GameboardController : MonoBehaviour
         }
     }
 
+    private void RunSlotChipsGenerator()
+    {
+        for(int i = BoardSize - 1; i >= BoardSize - BoardWidth; i--)
+        {
+                var slotEntity = _entityManager.GetComponentData<SlotEntity>(_generatedSlots[i]);
+                if (slotEntity.m_Chip == Entity.Null)
+                {
+                    NativeArray<Entity> generatedChips = new NativeArray<Entity>(1, Allocator.Temp);
+
+                    _entityManager.CreateEntity(_chipArchetype, generatedChips);
+
+                    // generating chips
+                    GenerateChip(generatedChips[0], i);
+
+                    _entityManager.SetComponentData(_generatedSlots[i], new SlotEntity()
+                    {
+                        m_Chip = generatedChips[0]
+                    });
+                }
+        }
+    }
+
+
 
 #endregion
 
@@ -248,6 +277,8 @@ public class GameboardController : MonoBehaviour
     {
         // enable input
         IsChipsMoving = false;
+
+        RunSlotChipsGenerator();
 
         // Core logic
         ScheduleBoardMatchingJob();
