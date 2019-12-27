@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using SharedCore;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
@@ -15,6 +17,16 @@ public enum SwipeDirection
 
 public class PieceControlSystem : ComponentSystem
 {
+    public static string OnChipSwipeRequested = "OnChipSwiped";
+
+    public static Dictionary<SwipeDirection, Vector2Int> SwipeDirectionToVector2 = new Dictionary<SwipeDirection, Vector2Int>
+    {
+        { SwipeDirection.LEFT, Vector2Int.left},
+        { SwipeDirection.RIGHT, Vector2Int.right},
+        { SwipeDirection.UP, Vector2Int.up},
+        { SwipeDirection.DOWN, Vector2Int.down}
+    };
+
     private float3 startPosition;
     private float3 endPosition;
 
@@ -37,10 +49,11 @@ public class PieceControlSystem : ComponentSystem
 
             var swipeDirection = DetectSwipeDirection(direction);
 
-            Entities.ForEach((Entity entity, ref Translation translation, ref ChipEntity chip) =>
+            var swipeVector = SwipeDirectionToVector2[swipeDirection];
+
+            Entities.ForEach((Entity entity, ref Translation translation, ref SlotEntity slotEntity, ref SlotPosition slotPosition) =>
             {
                 float3 entityPosition = translation.Value;
-
 
                 if (
                     entityPosition.x >= startPosition.x - chipWidth &&
@@ -52,7 +65,9 @@ public class PieceControlSystem : ComponentSystem
                     // Entity inside selection area
                     Debug.LogFormat("<color=green>" + entity + "</color>");
 
-                    PostUpdateCommands.DestroyEntity(entity);
+                    // PostUpdateCommands.AddComponent(entity, new ChipSwipeComponent { SwipeDirection = swipeDirection });
+
+                    Messenger.Broadcast(OnChipSwipeRequested, slotPosition, swipeVector);
                 }
             });
 
@@ -62,13 +77,15 @@ public class PieceControlSystem : ComponentSystem
 
     public SwipeDirection DetectSwipeDirection(Vector3 direction)
     {
-        if (Mathf.Abs(direction.x) > Mathf.Abs(direction.y))  // horizontal
+        if (Mathf.Abs(direction.x) > Mathf.Abs(direction.y))
+            // horizontal swipe
         {
             if (direction.x > 0)
                 return SwipeDirection.RIGHT;
             return SwipeDirection.LEFT;
         }
-        else // vertical
+        else
+            // vertical swipe
         {
             if (direction.y > 0)
                 return SwipeDirection.UP;

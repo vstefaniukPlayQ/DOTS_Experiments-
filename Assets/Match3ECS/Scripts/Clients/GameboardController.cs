@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using SharedCore;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
@@ -64,6 +65,8 @@ public class GameboardController : MonoBehaviour
     private NativeArray<Entity> _generatedSlots = new NativeArray<Entity>();
 
     #endregion
+
+    private bool IsChipsMoving;
 
     protected void Start()
     {
@@ -211,6 +214,107 @@ typeof(ChipColorComponent),
         _generatedSlots.Dispose();
     }
 
+    public void OnEnable()
+    {
+        Messenger.AddListener<SlotPosition, Vector2Int>(PieceControlSystem.OnChipSwipeRequested, OnChipSwipeRequested);
+
+        Messenger.AddListener(SystemEvents.OnMoveToTargetSystemStartedRunning, OnMoveToTargetSystemStartedRunning);
+        Messenger.AddListener(SystemEvents.OnMoveToTargetSystemStopedRunning, OnMoveToTargetSystemStopedRunning);
+    }
+
+    public void OnDisable()
+    {
+        Messenger.RemoveListener<SlotPosition, Vector2Int>(PieceControlSystem.OnChipSwipeRequested, OnChipSwipeRequested);
+
+        Messenger.RemoveListener(SystemEvents.OnMoveToTargetSystemStartedRunning, OnMoveToTargetSystemStartedRunning);
+        Messenger.RemoveListener(SystemEvents.OnMoveToTargetSystemStopedRunning, OnMoveToTargetSystemStopedRunning);
+    }
+
+
+    private void OnMoveToTargetSystemStartedRunning()
+    {
+        // disable input
+        IsChipsMoving = true;
+    }
+
+    private void OnMoveToTargetSystemStopedRunning()
+    {
+        // enable input
+        IsChipsMoving = false;
+
+        // Core logic
+        //ScheduleBoardMatchingJob();
+    }
+
+    private void OnChipSwipeRequested(SlotPosition slotPosition, Vector2Int direction)
+    {
+        if (IsChipsMoving)
+            return;
+
+        DoSlotChipSwapWithAnimation(slotPosition, direction);
+
+        // when animation has finished trigger find mathes code
+
+        // if match has been found then do nothing,
+
+        // if match has not been found then play reverse animation
+
+    }
+
+    private void DoSlotChipSwapWithAnimation(SlotPosition slotPosition, Vector2Int direction)
+    {        Debug.LogFormat("<color=green> OnChipSwiped </color>");
+
+        // check if we can move in the desired direction
+        var moveToX = slotPosition.X + direction.x;
+        var moveToY = slotPosition.Y + direction.y;
+
+        if (moveToX < 0 || moveToX >= BoardWidth)
+        {
+            Debug.LogFormat("<color=yellow> OnChipSwiped - Swiped outside the board </color>");
+            return;
+        }
+
+        if (moveToY < 0 || moveToY >= BoardHeight)
+        {
+            Debug.LogFormat("<color=yellow> OnChipSwiped - Swiped outside the board </color>");
+            return;
+        }
+
+        // get chip/slot for desired move position
+        var moveToSlotIndex = moveToX + moveToY * BoardWidth;
+        var moveFromSlotIndex = slotPosition.X + slotPosition.Y * BoardWidth;
+
+        var moveToSlot = _generatedSlots[moveToSlotIndex];
+        var moveFromSlot = _generatedSlots[moveFromSlotIndex];
+
+        var moveToSlotEntity = _entityManager.GetComponentData<SlotEntity>(moveToSlot);
+        var moveFromSlotEntity = _entityManager.GetComponentData<SlotEntity>(moveFromSlot);
+
+        var moveToChip = moveToSlotEntity.m_Chip;
+        var moveFromChip = moveFromSlotEntity.m_Chip;
+
+        // add move to component for each of them
+
+
+        _entityManager.SetComponentData(moveToSlot,  new SlotEntity { m_Chip = moveFromChip });
+        _entityManager.SetComponentData(moveFromSlot,  new SlotEntity { m_Chip = moveToChip });
+
+
+        // make chips move
+
+        _entityManager.AddComponent(moveToChip, typeof(MoveToTargetComponent));
+        _entityManager.SetComponentData(moveToChip, new MoveToTargetComponent
+        {
+            Target = moveFromSlot
+        });
+
+        _entityManager.AddComponent(moveFromChip, typeof(MoveToTargetComponent));
+        _entityManager.SetComponentData(moveFromChip, new MoveToTargetComponent
+        {
+            Target = moveToSlot
+        });
+    }
+
     void ScheduleBoardMatchingJob()
     {
         var boardPieces = new NativeArray<PieceColor>(PieceColors, Allocator.Persistent);
@@ -341,7 +445,17 @@ typeof(ChipColorComponent),
                     previousSlotIndex = index;
             }
         }
+    }
 
+    private void MoveChipToSlot()
+    {
+
+    }
+
+    public static int TwoDimentionToOneDimention(int x, int y, int width)
+    {
+        // rowIndex * numberOfColumns + columnIndex.
+        return (x * width) + y;
     }
 }
 
