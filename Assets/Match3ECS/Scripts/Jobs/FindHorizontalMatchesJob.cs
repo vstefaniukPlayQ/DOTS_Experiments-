@@ -18,52 +18,32 @@ public struct FindHorizontalMatchesJob : IJobParallelFor
         int convertedRowLeftLimit = row * SlotsPerRow;
         int convertedRowRightLimit = convertedRowLeftLimit + SlotsPerRow;
 
-        NativeList<int> matches = new NativeList<int>(Allocator.Temp);
-
-        PieceColor myColor = Board[index];
-
         // add selected chip to collection of matches as we going to check pieces
         // to left and right and don't include selected chi[
-        matches.Add(index);
+        int matches = 1;
+
+        PieceColor myColor = Board[index];
 
         // going left
         for (int i = index - 1; i >= convertedRowLeftLimit; i--)
         {
             var selectedPiece = Board[i];
-            if (selectedPiece == myColor) // matched !
-            {
-                matches.Add(i);
-            }
-            else
-            {
+            if (selectedPiece != myColor)
                 break;
-            }
+            matches++;
         }
 
         // going right
         for (int i = index + 1; i < convertedRowRightLimit; i++)
         {
             var selectedPiece = Board[i];
-            if (selectedPiece == myColor) // matched !
-            {
-                matches.Add(i);
-            }
-            else
-            {
+            if (selectedPiece != myColor)
                 break;
-            }
+            matches++;
         }
 
         // more than 2 pieces of same color
-        if (matches.Length > 2)
-        {
-            Output[index] = matches.Length;
-
-            //for (int m = 0; m < matches.Count; m++)
-            // write all match list somewhere
-                //Output.Enqueue(m);
-        }
-
-        matches.Dispose();
+        if(matches > 2)
+            Output[index] = matches;
     }
 }

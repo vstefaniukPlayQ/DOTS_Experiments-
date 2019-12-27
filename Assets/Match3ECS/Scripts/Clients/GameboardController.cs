@@ -352,7 +352,7 @@ typeof(ChipColorComponent),
         var verticalMatchesJob = new FindVerticalMatchesJob
         {
             Board = boardPieces,
-            SlotsPerCollumn = BoardHeight,
+            SlotsPerColumn = BoardHeight,
             Output = verticalMatchesResult
         };
 
