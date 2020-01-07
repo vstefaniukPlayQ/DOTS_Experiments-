@@ -17,6 +17,7 @@
               <e p="ChipColorComponent.cs" t="Include" />
               <e p="ChipEntity.cs" t="Include" />
               <e p="ChipPositionComponent.cs" t="Include" />
+              <e p="ChipSwipeComponent.cs" t="Include" />
               <e p="GravityComponent.cs" t="Include" />
               <e p="LevelComponent.cs" t="Include" />
               <e p="MoveSpeedComponent.cs" t="Include" />
@@ -31,12 +32,15 @@
               <e p="MyJob.cs" t="Include" />
               <e p="VelocityJob.cs" t="Include" />
             </e>
+            <e p="Messenger.cs" t="Include" />
             <e p="Systems" t="Include">
+              <e p="ChipSwipeSystem.cs" t="Include" />
               <e p="FindMatchesSystem.cs" t="Include" />
               <e p="GravitySystem.cs" t="Include" />
               <e p="LevelUpSystem.cs" t="Include" />
               <e p="MoveSystem.cs" t="Include" />
               <e p="MoveToTargetSystem.cs" t="Include" />
+              <e p="PieceControlSystem.cs" t="Include" />
             </e>
           </e>
         </e>
